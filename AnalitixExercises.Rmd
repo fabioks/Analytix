@@ -1,0 +1,251 @@
+---
+title: "Analitix"
+author: "Fabio Sato"
+date: "27 de junho de 2016"
+output: html_document
+---
+
+# Mineração de Dados e Introdução a "Big Data"
+
+### Exercício 1.
+
+Faça um texto crítico comparando os resultados dos experimentos descritos a seguir. Para cada um dos conjuntos de dados
+fornecidos (adults.txt, bank-full.txt, cadastroClientes.txt e cadastro.txt), realize a classificação usando pelo menos
+4 classificadores, sendo um classificador com base em árvore de decisão, um classificador com base em K-vizinhos mais
+próximos (K-NN), um classificador Naive-Bayes e um classificador com base em regressão.
+
+Para cada um dos classificadores, explore as seguintes variações:
+
+* Com e sem validação cruzada;
+
+* Com e sem poda (para algoritmos com base em árvore de decisão);
+
+* Com e sem a discretização (ou normalização) dos atributos.
+
+Com base nos algoritmos de aprendizado não supervisionados (K-Means, EM e Apriori), realize análises exploratórias com
+o objetivo de obter evidências empíricas que possam ser úteis para embasar as conclusões finais sobre a classificação
+e mostre como o uso de algoritmos de clustering poderia ser usado para gerar variáveis ocultas.
+
+Seu texto deve abordar a super-estimativa (over-fitting), a matriz de confusão e a taxa de classificação correta
+(obtida em cada execução), a adequação da complexidade do modelo utilizado, o conhecimento a priori, a adequação da
+quantidade de dados e compará-los. E ao final, o texto deve conter a sua opinião sobre qual foi o melhor resultado
+obtido para cada conjunto de dados e porquê você o considerou o melhor, e deve também conter uma análise de quais
+diferenças você observou nos resultados observados.
+
+Carregando bibliotecas de trabalho:
+
+```{r loading_packages, warning=FALSE, message=FALSE}
+library(party)
+library(dplyr)
+```
+
+Realizando cargas dos arquivos:
+
+```{r loading_files, warning=FALSE}
+# Set da área de trabalho
+setwd("C:/Users/f992846/Documents/Sato/Analitics/")
+
+# Carregamento dos arquivos de trabalho
+cadastroClientes <- read.table("cadastroClientes.txt", header = TRUE, sep = ",", strip.white = TRUE)
+colClasses <- (rep('factor', 17))
+cadastro <- read.table(file = "cadastro.txt", header = TRUE, sep = "\t", strip.white = TRUE, colClasses = colClasses)
+census <- read.table(file = "census.txt", header = TRUE, sep = ",", strip.white = TRUE, na.strings = "?")
+bank <- read.csv("bank-full.csv", header = TRUE, sep = ";", strip.white = TRUE)
+```
+
+Resumo dos dados carregados:
+
+```{r summary}
+head(cadastroClientes)
+summary(cadastroClientes)
+str(cadastroClientes)
+
+head(cadastro)
+summary(cadastro)
+str(cadastro)
+
+head(census)
+summary(census)
+str(census)
+
+head(bank)
+summary(bank)
+str(bank)
+```
+
+
+
+```{r sampling}
+cadastroClientes.data <- sample(2, nrow(cadastroClientes), replace = TRUE, prob = c(0.7, 0.3))
+cadCli.training <- cadastroClientes[cadastroClientes.data == 1, ]
+cadCli.test <- cadastroClientes[cadastroClientes.data == 2, ]
+
+cadastro.data <- sample(2, nrow(cadastro), replace = TRUE, prob = c(0.7, 0.3))
+cad.training <- cadastro[cadastro.data == 1, ]
+cad.test <- cadastro[cadastro.data == 2, ]
+
+census.data <- sample(2, nrow(census), replace = TRUE, prob = c(0.7, 0.3))
+census.training <- census[census.data == 1, ]
+census.test <- census[census.data == 2, ]
+
+bank.data <- sample(2, nrow(bank), replace = TRUE, prob = c(0.7, 0.3))
+bank.training <- bank[bank.data == 1, ]
+bank.test <- bank[bank.data == 2, ]
+```
+
+```{r modeling}
+cadCli.tree <- ctree(Classe ~ ., data = cadCli.training)
+table(predict(cadCli.tree), cadCli.training$Classe)
+
+cad.tree <- ctree(classe ~ .,data = cad.training)
+table(predict(cad.tree), cad.training$classe)
+
+census.tree <- ctree(class ~ ., data = census.training)
+table(predict(census.tree), census.training$class)
+
+bank.tree <- ctree(y ~ ., data = bank.training)
+table(predict(bank.tree), bank.training$y)
+```
+
+```{r grafics, message=FALSE, warning=FALSE}
+print(cadCli.tree)
+plot(cadCli.tree)
+
+print(cad.tree)
+plot(cad.tree)
+
+print(census.tree)
+plot(census.tree)
+
+print(bank.tree)
+plot(bank.tree)
+
+dev.off()
+```
+
+### Exercício 2.
+
+Com base no exemplo de análise de sentimentos (classificação de textos) visto nas aulas, realize experimentos que
+permitam classificar os textos dados no arquivo de dados textuais. Siga os passos realizados na demonstração
+realizada em aula e produza um texto crítico sobre as possíveis variações durante o processo de extração de atributos.
+Analise o impacto de tais variações nos resultados da classificação realizada usando o Naive-Bayes.
+
+```{r loading_libs, warning=FALSE, message=FALSE}
+library(tm)
+library(wordcloud)
+library(stringi)
+library(RWeka)
+library(RColorBrewer)
+library(ggplot2)
+```
+
+```{r loading_text}
+treino <- read.table(file = "treino.txt", header = TRUE, sep = ",", stringsAsFactors = FALSE)
+teste <- read.table(file = "treino.txt", header = TRUE, sep = ",", stringsAsFactors = FALSE)
+```
+
+```{r n_grams, warning=FALSE}
+treino <- unique(treino$x)
+corpus <- Corpus(VectorSource(treino))
+
+corpus <- tm_map(corpus, stripWhitespace)
+corpus <- tm_map(corpus, content_transformer(tolower))
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeNumbers)
+corpus_one <- tm_map(corpus, removeWords, stopwords("english"))
+
+one_gram_tokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 1, max = 1))
+one_dtm <- DocumentTermMatrix(corpus_one, control = list(tokenize = one_gram_tokenizer))
+one_freq <- sort(colSums(as.matrix(one_dtm)), decreasing = TRUE)
+one_word_freq <- data.frame(word = names(one_freq), freq = one_freq)
+
+head(one_word_freq, 15)
+
+one_word_freq %>%
+    filter(freq > 40) %>%
+    ggplot(aes(x = reorder(word, -freq), y = freq, fill = word)) +
+    geom_bar(stat = "identity") +
+    ggtitle("One-gram with frequencies > 40") +
+    xlab("One-gram") + ylab("Frequency") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_colour_gradientn(colours = rainbow(25)) +
+    guides(fill = FALSE)
+
+wordcloud(one_word_freq$word, one_word_freq$freq, random.order = FALSE, colors = brewer.pal(8, "Dark2"))
+
+two_gram_tokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+two_dtm <- DocumentTermMatrix(corpus, control = list(tokenize = two_gram_tokenizer))
+two_freq <- sort(colSums(as.matrix(two_dtm)), decreasing = TRUE)
+two_word_freq <- data.frame(word = names(two_freq), freq = two_freq)
+
+head(two_word_freq, 15)
+
+two_word_freq %>%
+    filter(freq > 36) %>%
+    ggplot(aes(x = reorder(word, -freq), y = freq, fill = word)) +
+    geom_bar(stat = "identity") +
+    ggtitle("Two-gram with frequencies > 36") +
+    xlab("Two-gram") + ylab("Frequency") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_colour_gradientn(colours = rainbow(25)) +
+    guides(fill = FALSE)
+
+wordcloud(two_word_freq$word, two_word_freq$freq, random.order = FALSE, colors = brewer.pal(8, "Dark2"))
+
+three_gram_tokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3))
+three_dtm <- DocumentTermMatrix(corpus, control = list(tokenize = three_gram_tokenizer))
+three_freq <- sort(colSums(as.matrix(three_dtm)), decreasing = TRUE)
+three_word_freq <- data.frame(word = names(three_freq), freq = three_freq)
+
+head(three_word_freq, 15)
+
+three_word_freq %>%
+    filter(freq > 26) %>%
+    ggplot(aes(x = reorder(word, -freq), y = freq, fill = word)) +
+    geom_bar(stat = "identity") +
+    ggtitle("Three-gram with frequencies > 26") +
+    xlab("Three-gram") + ylab("Frequency") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_colour_gradientn(colours = rainbow(25)) +
+    guides(fill = FALSE)
+
+wordcloud(three_word_freq$word, three_word_freq$freq, random.order = FALSE, colors = brewer.pal(8, "Dark2"))
+
+four_gram_tokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 4, max = 4))
+four_dtm <- DocumentTermMatrix(corpus, control = list(tokenize = four_gram_tokenizer))
+four_freq <- sort(colSums(as.matrix(four_dtm)), decreasing = TRUE)
+four_word_freq <- data.frame(word = names(four_freq), freq = four_freq)
+
+head(four_word_freq, 15)
+
+four_word_freq %>%
+    filter(freq > 15) %>%
+    ggplot(aes(x = reorder(word, -freq), y = freq, fill = word)) +
+    geom_bar(stat = "identity") +
+    ggtitle("Four-gram with frequencies > 15") +
+    xlab("Four-gram") + ylab("Frequency") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_colour_gradientn(colours = rainbow(25)) +
+    guides(fill = FALSE)
+
+wordcloud(four_word_freq$word, four_word_freq$freq, random.order = FALSE, colors = brewer.pal(8, "Dark2"))
+
+five_gram_tokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 5, max = 5))
+five_dtm <- DocumentTermMatrix(corpus, control = list(tokenize = five_gram_tokenizer))
+five_freq <- sort(colSums(as.matrix(five_dtm)), decreasing = TRUE)
+five_word_freq <- data.frame(word = names(five_freq), freq = five_freq)
+
+head(five_word_freq, 15)
+
+five_word_freq %>%
+    filter(freq > 10) %>%
+    ggplot(aes(x = reorder(word, -freq), y = freq, fill = word)) +
+    geom_bar(stat = "identity") +
+    ggtitle("Five-gram with frequencies > 10") +
+    xlab("Five-gram") + ylab("Frequency") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_colour_gradientn(colours = rainbow(25)) +
+    guides(fill = FALSE)
+
+wordcloud(five_word_freq$word, five_word_freq$freq, random.order = FALSE, colors = brewer.pal(8, "Dark2"))
+```
